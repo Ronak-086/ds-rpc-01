@@ -1,18 +1,12 @@
 # app/services/ingestion_service.py
-# app/services/ingestion_service.py
-
-from langchain_community.document_loaders import DirectoryLoader, TextLoader
-from langchain_community.embeddings import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
-
 
 import os
+import pickle
 from typing import List
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-# from langchain.document_loaders import DirectoryLoader, TextLoader
-# from langchain.embeddings.openai import OpenAIEmbeddings
-# from langchain.vectorstores import Chroma
-from app.utils.config import OPENAI_API_KEY
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
 class IngestionService:
 
@@ -20,20 +14,22 @@ class IngestionService:
         self.data_dir = data_dir
         self.persist_dir = persist_dir
 
+        self.embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
     def load_documents(self) -> List:
         all_documents = []
 
-        # Loop over each department folder
         for department in os.listdir(self.data_dir):
             department_path = os.path.join(self.data_dir, department)
 
-            # Load only .txt files for simplicity (can extend later)
-            loader = DirectoryLoader(department_path, glob="*.txt", loader_cls=TextLoader)
-            docs = loader.load()
+            docs = []
+            for ext in ["*.txt", "*.md"]:
+                loader = DirectoryLoader(department_path, glob=ext, loader_cls=TextLoader)
+                docs.extend(loader.load())
 
-            # Add department metadata to each document
             for doc in docs:
                 doc.metadata["department"] = department
+
             all_documents.extend(docs)
 
         return all_documents
@@ -44,10 +40,11 @@ class IngestionService:
         return chunks
 
     def embed_and_store(self, chunks: List):
-        embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-        vectordb = Chroma.from_documents(chunks, embedding=embeddings, persist_directory=self.persist_dir)
-        vectordb.persist()
-        print("✅ Embeddings created and stored successfully.")
+        vector_store = FAISS.from_documents(chunks, embedding=self.embedding)
+
+        # Persist locally
+        vector_store.save_local(self.persist_dir)
+        print("✅ Embeddings stored in FAISS locally.")
 
     def run_ingestion(self):
         print("🔎 Loading documents...")
@@ -60,4 +57,3 @@ class IngestionService:
 
         print("🧠 Generating embeddings...")
         self.embed_and_store(chunks)
-

@@ -4,7 +4,10 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 app = FastAPI()
 security = HTTPBasic()
+from fastapi import Form
+from app.services.rag_service import RagService
 
+rag_service = RagService()
 # Dummy user database (fixed the typo in 'Natasha')
 users_db: Dict[str, Dict[str, str]] = {
     "Tony": {"password": "password123", "role": "engineering"},
@@ -45,9 +48,9 @@ def test(user=Depends(authenticate)):
 # Protected chat endpoint (RAG to be implemented later)
 @app.post("/chat")
 def query(user=Depends(authenticate), message: str = Form(...)):
-    # For now, return a dummy response. We'll replace this with RAG pipeline later.
+    response = rag_service.ask(message, user['role'])
     return {
         "username": user['username'],
         "role": user['role'],
-        "response": f"This is a dummy response to your message: {message}"
+        "response": response
     }
