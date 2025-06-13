@@ -1,22 +1,21 @@
 from typing import Dict
-
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Form
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-
 
 app = FastAPI()
 security = HTTPBasic()
 
-# Dummy user database
+# Dummy user database (fixed the typo in 'Natasha')
 users_db: Dict[str, Dict[str, str]] = {
     "Tony": {"password": "password123", "role": "engineering"},
     "Bruce": {"password": "securepass", "role": "marketing"},
     "Sam": {"password": "financepass", "role": "finance"},
     "Peter": {"password": "pete123", "role": "engineering"},
     "Sid": {"password": "sidpass123", "role": "marketing"},
-    "Natasha": {"passwoed": "hrpass123", "role": "hr"}
+    "Natasha": {"password": "hrpass123", "role": "hr"},
+    "Clark": {"password": "employee123", "role": "employee"},
+    "Steve": {"password": "c123", "role": "c_level"}
 }
-
 
 # Authentication dependency
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
@@ -27,6 +26,9 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"username": username, "role": user["role"]}
 
+@app.get("/")
+def root():
+    return {"message": "RBAC Chatbot API is running"}
 
 # Login endpoint
 @app.get("/login")
@@ -40,7 +42,12 @@ def test(user=Depends(authenticate)):
     return {"message": f"Hello {user['username']}! You can now chat.", "role": user["role"]}
 
 
-# Protected chat endpoint
+# Protected chat endpoint (RAG to be implemented later)
 @app.post("/chat")
-def query(user=Depends(authenticate), message: str = "Hello"):
-    return "Implement this endpoint."
+def query(user=Depends(authenticate), message: str = Form(...)):
+    # For now, return a dummy response. We'll replace this with RAG pipeline later.
+    return {
+        "username": user['username'],
+        "role": user['role'],
+        "response": f"This is a dummy response to your message: {message}"
+    }
