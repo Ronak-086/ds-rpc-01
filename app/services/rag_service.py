@@ -1,68 +1,49 @@
-# app/services/rag_service.py
-
 import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from langchain.prompts import PromptTemplate
 
-# role-based department filtering (same as before)
+load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
 role_department_map = {
+    "engineering": "engineering",
     "finance": "finance",
     "marketing": "marketing",
-    "engineering": "engineering",
     "hr": "hr",
     "employee": "general",
-    "c_level": None  # full access
+    "c_level": None
 }
 
 class RagService:
-
-    def __init__(self, persist_dir: str = "vector_store"):
-        self.persist_dir = persist_dir
-
+    def __init__(self, persist_dir="vector_store"):
         self.embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        self.vector_store = FAISS.load_local(
-    self.persist_dir,
-    embeddings=self.embedding,
-    allow_dangerous_deserialization=True
-)
+        self.vector_store = FAISS.load_local(persist_dir, embeddings=self.embedding, allow_dangerous_deserialization=True)
 
-
-        # Load local LLM model (small for now)
-        self.model_name = "microsoft/phi-2"  # Or replace with "mistralai/Mistral-7B-Instruct-v0.1"
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
-
-        self.generator = pipeline("text-generation", model=self.model, tokenizer=self.tokenizer)
-
-        self.prompt_template = PromptTemplate(
-            template="""
-You are an assistant for FinSolve Technologies.
-Use the following context to answer the user's question.
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:
-""",
-            input_variables=["context", "question"]
-        )
-
-    def get_relevant_documents(self, query: str, role: str):
+    def retrieve(self, query, role):
+        docs = self.vector_store.similarity_search(query, k=5)
         if role_department_map[role] is None:
-            return self.vector_store.similarity_search(query, k=5)
-        else:
-            department = role_department_map[role]
-            return self.vector_store.similarity_search(query, k=5, filter={"department": department})
+            return docs
+        return [doc for doc in docs if doc.metadata.get("department") == role_department_map[role]]
 
-    def ask(self, query: str, role: str) -> str:
-        documents = self.get_relevant_documents(query, role)
-        context = "\n".join([doc.page_content for doc in documents])
+    def generate_answer(self, context, query):
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        prompt = f"""
+        You are a company assistant. Answer based only on this context:
 
-        full_prompt = self.prompt_template.format(context=context, question=query)
-        response = self.generator(full_prompt, max_new_tokens=200)[0]['generated_text']
-        return response
+        Context:
+        {context}
+
+        Question:
+        {query}
+
+        Answer:
+        """
+        response = model.generate_content(prompt)
+        return response.text
+
+    def ask(self, query, role):
+        docs = self.retrieve(query, role)
+        context = "\n".join([doc.page_content for doc in docs])
+        return self.generate_answer(context, query)

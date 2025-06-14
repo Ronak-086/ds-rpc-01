@@ -1,5 +1,3 @@
-# app/utils/ingest.py
-
 from app.services.ingestion_service import IngestionService
 
 if __name__ == "__main__":
